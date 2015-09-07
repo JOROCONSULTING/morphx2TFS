@@ -1,0 +1,157 @@
+﻿Exportfile for AOT version 1.0 or later
+Formatversion: 1
+
+***Element: JOB
+
+; Microsoft Dynamics AX Job: SourceControl_MorphX_to_TFS unloaded
+; --------------------------------------------------------------------------------
+  JOBVERSION 1
+  
+  SOURCE #SourceControl_MorphX_to_TFS
+    #static void SourceControl_MorphX_to_TFS(Args _args)
+    #{
+    #    SysVersionControlMorphXRevisionTable    VCSMorphXRevisonTable;
+    #    Int MorphXChangeListNumber = 0;
+    #    SysVersionControlItemComment previousComment;
+    #    UTCDateTime previousDate;
+    #    UserId  previousUser;
+    #    str authorStr = "";
+    #    str ExportFolder = @'c:\Enlistments\AXTEST\DAX';
+    #    str FilePath;
+    #    str TFSFilePath;
+    #    str FolderPath;
+    #    System.IO.Path path;
+    #    System.IO.FileInfo fileInfo;
+    #    str tfPath = @"C:\Program Files (x86)\Microsoft Visual Studio 10.0\Common7\IDE\tf.exe "
+    #    //str tfPath = @"C:\Temp\tf.cmd";
+    #    ;
+    #
+    #    str authorStr(userId _userId)
+    #    {
+    #        UserInfo userInfo;
+    #        ;
+    #
+    #        select id, networkAlias from userInfo where userInfo.Id == _userId;
+    #        if (userInfo.networkAlias != "Admin")
+    #        {
+    #            return ' /author:' + userInfo.networkAlias;
+    #        }
+    #
+    #        return "";
+    #    }
+    #
+    #    void submitChange(UserId _userId)
+    #    {
+    #        //Submit the TFS Changelist
+    #        if (!WinAPI::shellExecute(tfPath,
+    #        ' checkin' + authorStr(_userId) +
+    #        ' /noprompt /comment:"' + previousComment +
+    #        ' OriginalDate:' + DateTimeUtil::toStr(previousDate),
+    #        "","",1,true))
+    #        {
+    #             info(strfmt('Failed: checkin %1 /noprompt /comment:"%2 OriginalDate: %3"',authorStr(_userId), previousComment, DateTimeUtil::toStr(previousDate)));
+    #        }
+    #    }
+    #
+    #    //ITEMPATH, VERSION, COMMENT, ACTION, CREATEDDATETIME, CREATEDBY
+    #    while select * from VCSMorphXRevisonTable order by CREATEDDATETIME
+    #    {
+    #        //If the comment changes or if the user is different,or if the date is changed by more than 60 seconds then create a new changelist.
+    #        if (((previousComment != VCSMorphXRevisonTable.Comment) ||
+    #            (previousUser != VCSMorphXRevisonTable.createdBy) ||
+    #            (DateTimeUtil::getDifference(previousDate,VCSMorphXRevisonTable.createdDateTime) > 60)))
+    #        {
+    #            /*
+    #            //Return after 7 changelists for testing
+    #            if (MorphXChangeListNumber > 7)
+    #            {
+    #                return;
+    #            }
+    #            */
+    #
+    #            //Don't submit the first time
+    #            if (MorphXChangeListNumber != 0)
+    #            {
+    #                submitChange(VCSMorphXRevisonTable.createdBy);
+    #            }
+    #
+    #            //set the previous variable to the current
+    #            previousComment = VCSMorphXRevisonTable.Comment;
+    #            previousUser = VCSMorphXRevisonTable.createdBy;
+    #            previousDate = VCSMorphXRevisonTable.createdDateTime;
+    #
+    #            //Increment the morphX changelist number
+    #            MorphXChangeListNumber++;
+    #        }
+    #
+    #        FilePath = ExportFolder + VCSMorphXRevisonTable.ItemPath + '.xpo';
+    #        FolderPath = System.IO.Path::GetDirectoryName(FilePath);
+    #
+    #        //Create the path if it doesn't exist
+    #        if (!WinAPI::folderExists(FilePath))
+    #        {
+    #            WinAPI::createDirectoryPath(FolderPath);
+    #        }
+    #
+    #        switch (VCSMorphXRevisonTable.Action)
+    #        {
+    #            case "Add":
+    #                //Write the file to disk first, then add it to version control
+    #                try
+    #                {
+    #                    //Export the version of the object into a folder for this version
+    #                    VCSMorphXRevisonTable.writeToFile(FilePath);
+    #                }
+    #                catch (Exception::Error)
+    #                {
+    #                    info(strfmt("Error adding %1",FilePath));
+    #                }
+    #
+    #                if(!WinAPI::shellExecute(tfPath,VCSMorphXRevisonTable.Action + ' "' + FilePath + '" /noprompt', "", "", 1, true))
+    #                {
+    #                    info(strfmt("Failed %1 %2", VCSMorphXRevisonTable.Action, FilePath));
+    #                }
+    #                break;
+    #            case "Edit":
+    #                //Check out the file first, then delete the copy on disk and replace with the one from MorphX VCS
+    #                if(!WinAPI::shellExecute(tfPath,VCSMorphXRevisonTable.Action + ' "' + FilePath + '" /noprompt', "", "", 1, true))
+    #                {
+    #                    info(strfmt("Failed %1 %2", VCSMorphXRevisonTable.Action, FilePath));
+    #                }
+    #                try
+    #                {
+    #                    WinAPI::deleteFile(FilePath);
+    #                    //Export the version of the object into a folder for this version
+    #                    VCSMorphXRevisonTable.writeToFile(FilePath);
+    #                }
+    #                catch (Exception::Error)
+    #                {
+    #                    info(strfmt("Error editing %1",FilePath));
+    #                }
+    #                break;
+    #            case "Delete":
+    #                //Delete from TFS, then delete from file system
+    #                if(!WinAPI::shellExecute(tfPath,VCSMorphXRevisonTable.Action + ' "' + FilePath + '" /noprompt', "", "", 1, true))
+    #                {
+    #                    info(strfmt("Failed %1 %2", VCSMorphXRevisonTable.Action, FilePath));
+    #                }
+    #                try
+    #                {
+    #                    WinAPI::deleteFile(FilePath);
+    #                }
+    #                catch (Exception::Error)
+    #                {
+    #                    info(strfmt("Error deleting %1",FilePath));
+    #                }
+    #                break;
+    #        }
+    #    }
+    #
+    #    //Submit the last changelist
+    #    submitChange(VCSMorphXRevisonTable.createdBy);
+    #
+    #    info(strfmt("%1 Changelists from MorphX processed",MorphXChangeListNumber));
+    #}
+  ENDSOURCE
+
+***Element: END
